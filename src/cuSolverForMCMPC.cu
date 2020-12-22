@@ -6,7 +6,7 @@
 
 __global__ void make_Diagonalization(float *vec, float *mat)
 {
-    unsigned int id = threadIdx.x + blockDim.x + blockIdx.x;
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     if(threadIdx.x == blockIdx.x)
     {
         mat[id] = sqrtf(vec[threadIdx.x]);

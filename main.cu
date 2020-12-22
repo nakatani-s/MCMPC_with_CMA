@@ -136,6 +136,9 @@ int main(int argc, char **argv)
     float *d_work;
     int lwork = 0;
 
+    int work_size;
+    float *work_space;
+
     int info_gpu = 0;
 
     cudaStat1 = cudaMalloc ((void**)&d_A, sizeof(float) * lda * m);
@@ -207,9 +210,9 @@ int main(int argc, char **argv)
             //assert(cudaSuccess == cudaStat1);
             //assert(cudaSuccess == cudaStat2);
             //assert(cudaSuccess == cudaStat3);
-            printMatrix(m,1,eig_vec, lda, "C");
-            printf("=====Upper is eigen value====");
-            printMatrix(m,m,Diag_D, lda, "C");
+            // printMatrix(m,1,eig_vec, lda, "C");
+            // printf("=====Upper is eigen value====");
+            // printMatrix(m,m,Diag_D, lda, "C");
             make_Diagonalization<<<HORIZON,HORIZON>>>(d_W, d_A);
             cudaMemcpy(h_hat_Q, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
 
@@ -217,7 +220,18 @@ int main(int argc, char **argv)
             cudaMemcpy(device_cov, Diag_D, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             pwr_matrix_answerB<<<HORIZON,HORIZON>>>(device_cov, device_diag_eig);
             cudaDeviceSynchronize();
-            pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, device_cov);
+
+            cusolver_status = cusolverDnSpotrf_bufferSize(cusolverH, uplo, m, device_cov, m, &work_size);
+            assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );
+            // float* workspace ;
+            cudaMalloc((void**)&work_space, sizeof(float)*work_size);
+            cusolver_status = cusolverDnSpotrf(cusolverH, uplo, m, device_cov, m /* mat_Aの横幅 */, work_space, work_size, devInfo);
+            assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );
+            setup_init_Covariance<<<HORIZON, HORIZON>>>(d_hat_Q);
+            cusolver_status = cusolverDnSpotrs(cusolverH, uplo, m, m /* mat_Bの横幅 */, device_cov, m, d_hat_Q, m, devInfo);
+            assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );
+            // pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, device_cov);
+            pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, d_hat_Q);
             cudaDeviceSynchronize();
             cudaMemcpy(h_hat_Q, device_diag_eig, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
             cudaMemcpy(d_hat_Q, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
