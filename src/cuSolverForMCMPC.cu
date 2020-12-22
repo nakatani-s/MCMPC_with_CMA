@@ -106,7 +106,7 @@ void get_eigen_values(float *A, float *D)
     int info_gpu = 0;
 
     cusolver_status = cusolverDnCreate(&cusolverH);
-    assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+    // assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
     cudaStat1 = cudaMalloc ((void**)&d_A, sizeof(float) * lda * m);
     cudaStat2 = cudaMalloc ((void**)&d_W, sizeof(double) * m);
     cudaStat3 = cudaMalloc ((void**)&devInfo, sizeof(int));
