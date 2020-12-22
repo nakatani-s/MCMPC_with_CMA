@@ -22,6 +22,7 @@ unsigned int countBlocks(unsigned int a, unsigned int b) {
 void weighted_mean(Data1 *h_Data, int Blocks, float *Us_host)
 {
     float total_weight = 0.0f;
+    float temp[HORIZON] = {};
     for(int i = 0; i < Blocks; i++){
         if(isnan(h_Data[i].W))
         {
@@ -37,10 +38,11 @@ void weighted_mean(Data1 *h_Data, int Blocks, float *Us_host)
         {
             if(isnan(h_Data[k].W))
             {
-                Us_host[i] += 0.0f;
+                temp[i] += 0.0f;
             }else{
-                Us_host[i] += h_Data[k].W * h_Data[k].Input[i] / total_weight;
+                temp[i] += h_Data[k].W * h_Data[k].Input[i] / total_weight;
             }
+            Us_host[i] = temp[i]; 
         }
     }
 }
@@ -48,7 +50,7 @@ void weighted_mean(Data1 *h_Data, int Blocks, float *Us_host)
 __device__ float generate_u(int t, float mean, float var, float *d_cov, float *z)
 {
     int count_index;
-    count_index = t * HORIZON - 1;
+    count_index = t * HORIZON;
     float ret, sec_term;
     for(int k = 0; k < HORIZON; k++)
     {
@@ -67,24 +69,42 @@ __device__ float gen_u(unsigned int id, curandState *state, float ave, float vr)
 
 __global__ void setup_init_Covariance(float *Mat)
 {
-    unsigned int id = threadIdx.x + blockDim.x + blockIdx.x;
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    //float values;
+    /*if(threadIdx.x == 0 && blockIdx.x ==0)
+    {
+        values[threadIdx.x] = 1.0f;
+    }*/
     if(threadIdx.x == blockIdx.x)
     {
         Mat[id] = 1.0f;
+        values[threadIdx.x] = 1.0f;
     }else{
         Mat[id] = 0.0f;
+        values[threadIdx.x] = 0.0f;
     }
+    __syncthreads();
+    /*if(threadIdx.x == 0)
+    {
+       for(int i =0; i < blockDim.x; i++)
+           Mat[id] = values[i];
+    }  */   
+    
 }
 
-__global__ void MCMPC_GPU_Linear_Example(float *state, curandState *devs, Data1 *d_Datas, float var, int Blocks, float *d_cov)
+__global__ void MCMPC_GPU_Linear_Example(float x, float y, float w, curandState *devs, Data1 *d_Datas, float var, int Blocks, float *d_cov, float *d_param, float *d_matrix)
 {
-    unsigned int id = threadIdx.x + blockDim.x + blockIdx.x;
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    unsigned int seq;
+    seq = id;
     float qx = 0.0f;
     float total_cost = 0.0f;
     float u[HORIZON]= { };
     float block_var;
     // int Powers;
-    float d_state_here[dim_state] = {state[0], state[1], state[2]};
+    //printf("hoge id=%d\n", id);
+    float d_state_here[dim_state] = {x,y,w};
+    float get_state[dim_state] = {};
     float z[HORIZON] = { };
 
     for(int t = 0; t < HORIZON; t++)
@@ -92,16 +112,26 @@ __global__ void MCMPC_GPU_Linear_Example(float *state, curandState *devs, Data1 
         block_var = var;
         for(int t_x = 0; t_x < HORIZON; t_x++)
         {
-            z[t_x] = gen_u(id, devs, 0, 1.0f);
+            z[t_x] = gen_u(seq, devs, 0, 1.0f);
+            seq += 3;
         }
-        u[t] = generate_u(t, d_Datas->Input[t], var, d_cov, z);
-
-        calc_Linear_example(d_state_here, u[t], d_param, d_state_here);
-
-        qx += d_matrix[0] * d_state_here[0] * d_state_here[0];
-        qx += d_matrix[1] * d_state_here[0] * d_state_here[1];
-        qx += d_matrix[3] * d_state_here[0] * d_state_here[1];
-        qx += d_matrix[4] * d_state_here[1] * d_state_here[1];
+        u[t] = generate_u(t, d_Datas[0].Input[t], var, d_cov, z);
+        if(u[t]<-4.0f){
+           u[t] = -4.0f;
+        }
+        if(u[t] > 4.0f){
+           u[t] = 4.0f;
+        }
+        //printf("hoge id=%d @ %f %f\n", id, u[t], z[t]);
+        calc_Linear_example(d_state_here, u[t], d_param, get_state);
+        //printf("hoge id=%d @ %f %f %f\n", id, u[t], d_param[0], get_state[1]);
+        qx += d_matrix[0] * get_state[0] * get_state[0];
+        qx += d_matrix[1] * get_state[0] * get_state[1];
+        qx += d_matrix[3] * get_state[0] * get_state[1];
+        qx += d_matrix[4] * get_state[1] * get_state[1];
+        for(int h = 0; h < dim_state; h++){
+           d_state_here[h] = get_state[h];
+        }
         
         total_cost += qx;
 

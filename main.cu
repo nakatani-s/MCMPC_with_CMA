@@ -20,8 +20,26 @@
 
 #define Linear
 
+void printMatrix(int m, int n, float*A, int lda, const char* name)
+{
+    for(int row = 0 ; row < m ; row++){
+        for(int col = 0 ; col < n ; col++){
+            float Areg = A[row + col*lda];
+            printf("%s(%d,%d) = %f\n", name, row+1, col+1, Areg);
+            //printf("%s[%d] = %f\n", name, row + col*lda, Areg);
+        }
+    }
+}
 int main(int argc, char **argv)
 {
+    cusolverDnHandle_t cusolverH = NULL;
+    cusolverStatus_t cusolver_status = CUSOLVER_STATUS_SUCCESS;
+    cudaError_t cudaStat1 = cudaSuccess;
+    cudaError_t cudaStat2 = cudaSuccess;
+    cudaError_t cudaStat3 = cudaSuccess;
+
+    cusolver_status = cusolverDnCreate(&cusolverH);
+    assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
     /*データ書き込みファイルの定義*/
     FILE *fp;
     time_t timeValue;
@@ -34,12 +52,17 @@ int main(int argc, char **argv)
 
 
     float params[dim_param], state[dim_state], /*h_constraint[NUM_CONST],*/ h_matrix[dim_weight_matrix];
+    float *device_param, *device_matrix;
     Mat_sys_A( params );
     init_state( state );
     // init_constraint( h_constraint );
     init_Weight_matrix( h_matrix );
-    cudaMemcpyToSymbol(d_param, &params, dim_param * sizeof(float));
-    cudaMemcpyToSymbol(d_matrix, h_matrix, dim_weight_matrix * sizeof(float));
+    //cudaMemcpyToSymbol(d_param, &params, dim_param * sizeof(float));
+    cudaMalloc(&device_param, sizeof(float)*dim_param);
+    cudaMalloc(&device_matrix, sizeof(float)*dim_weight_matrix);
+    cudaMemcpy(device_param, params, sizeof(float)*dim_param, cudaMemcpyHostToDevice);
+    cudaMemcpy(device_matrix, h_matrix, sizeof(float)*dim_weight_matrix, cudaMemcpyHostToDevice);
+    
 
 #ifdef Linear
     float opt[HORIZON], Error[HORIZON];
@@ -66,18 +89,19 @@ int main(int argc, char **argv)
     /* curand の設定 */
     curandState *devStates;
     cudaMalloc((void **)&devStates, randomNums * sizeof(curandState));
-    setup_kernel<<<randomBlocks, THREAD_PER_BLOCKS>>>(devStates,rand());
+    setup_kernel<<<N_OF_SAMPLES * dim_U, HORIZON>>>(devStates,rand());
     cudaDeviceSynchronize();
 
     /* Covariance の定義 */
     float *h_hat_Q, *Diag_D;
     float *device_cov;
     float *device_diag_eig = NULL;
+    float *d_hat_Q;
     h_hat_Q = (float *)malloc(sizeof(float)*dim_hat_Q);
     Diag_D = (float *)malloc(sizeof(float)*dim_hat_Q);
     cudaMalloc(&device_cov, sizeof(float)*dim_hat_Q);
     cudaMalloc(&device_diag_eig, sizeof(float)*dim_hat_Q);
-    /*cudaMalloc(&d_hat_Q, sizeof(float)*dim_hat_Q);*/
+    cudaMalloc(&d_hat_Q, sizeof(float)*dim_hat_Q);
 
     setup_init_Covariance<<<HORIZON, HORIZON>>>(d_hat_Q);
 
@@ -99,24 +123,17 @@ int main(int argc, char **argv)
     }
 
     /* 固有値の取得 */
-    cusolverDnHandle_t cusolverH = NULL;
-    cusolverStatus_t cusolver_status = CUSOLVER_STATUS_SUCCESS;
-    cudaError_t cudaStat1 = cudaSuccess;
-    cudaError_t cudaStat2 = cudaSuccess;
-    cudaError_t cudaStat3 = cudaSuccess;
-
-    cusolver_status = cusolverDnCreate(&cusolverH);
-    assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+    
 
     const int m = HORIZON;
     const int lda = m;
 
     float eig_vec[m] = { };
 
-    float *d_A = NULL;
-    float *d_W = NULL;
-    int *devInfo = NULL;
-    float *d_work = NULL;
+    float *d_A;
+    float *d_W;
+    int *devInfo;
+    float *d_work;
     int lwork = 0;
 
     int info_gpu = 0;
@@ -127,50 +144,30 @@ int main(int argc, char **argv)
     assert(cudaSuccess == cudaStat1);
     assert(cudaSuccess == cudaStat2);
     assert(cudaSuccess == cudaStat3);
+    cusolverEigMode_t jobz = CUSOLVER_EIG_MODE_VECTOR; // compute eigenvalues and eigenvectors.
+    cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
 
     for(int time = 0; time < TIME; time++){
         for(int repeat = 0; repeat < Recalc; repeat++){
-            var = Variavility;
+            var = Variavility * pow(0.95,repeat);
             cudaMemcpy(d_dataFromBlocks, h_dataFromBlocks, sizeof(Data1)*numBlocks, cudaMemcpyHostToDevice);
             cudaDeviceSynchronize();
             // MCMPC_GPU<<<numBlocks, THREAD_PER_BLOCKS>>>(state, devStates, d_dataFromBlocks, var, Blocks, d_hat_Q);
-            MCMPC_GPU_Linear_Example<<<numBlocks, THREAD_PER_BLOCKS>>>(state, devStates, d_dataFromBlocks, var, Blocks, d_hat_Q);
+            MCMPC_GPU_Linear_Example<<<numBlocks, THREAD_PER_BLOCKS>>>(state[0],state[1],state[2], devStates, d_dataFromBlocks, var, Blocks, d_hat_Q, device_param, device_matrix);
             cudaDeviceSynchronize();
             cudaMemcpy(h_dataFromBlocks, d_dataFromBlocks, sizeof(Data1) * numBlocks, cudaMemcpyDeviceToHost);
             weighted_mean(h_dataFromBlocks, Blocks, Us_host);
+            //printMatrix(m,1,Us_host, m, "u");
             cudaMemcpy(Us_device, Us_host, sizeof(float) * HORIZON, cudaMemcpyHostToDevice);
+            //printf("hoge\n");
             calc_Var_Cov_matrix<<<HORIZON, HORIZON>>>(device_cov, d_dataFromBlocks, Us_device, Blocks);
             cudaDeviceSynchronize();
             cudaMemcpy(h_hat_Q, device_cov, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
-            // get_eigen_values(h_hat_Q, Diag_D);
-            /* 固有値の取得 */
-            /*cusolverDnHandle_t cusolverH = NULL;
-            cusolverStatus_t cusolver_status = CUSOLVER_STATUS_SUCCESS;
-            cudaError_t cudaStat1 = cudaSuccess;
-            cudaError_t cudaStat2 = cudaSuccess;
-            cudaError_t cudaStat3 = cudaSuccess;
-            const int m = HORIZON;
-            const int lda = m;
-
-            float eig_vec[m] = { };
-
-            float *d_A = NULL;
-            float *d_W = NULL;
-            int *devInfo = NULL;
-            float *d_work = NULL;
-            int lwork = 0;
-
-            int info_gpu = 0;
-
-            /*cusolver_status = cusolverDnCreate(&cusolverH);
-            assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);*/
-
+            //printMatrix(m,m,h_hat_Q, lda, "C");
+            
+            //cudaStat1 = cudaMemcpy(d_A, h_hat_Q, sizeof(float) * lda * m, cudaMemcpyHostToDevice);
             cudaStat1 = cudaMemcpy(d_A, h_hat_Q, sizeof(float) * lda * m, cudaMemcpyHostToDevice);
             assert(cudaSuccess == cudaStat1);
-
-            cusolverEigMode_t jobz = CUSOLVER_EIG_MODE_VECTOR; // compute eigenvalues and eigenvectors.
-            cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
-
             cusolver_status = cusolverDnSsyevd_bufferSize(
                 cusolverH,
                 jobz,
@@ -181,9 +178,12 @@ int main(int argc, char **argv)
                 d_W,
                 &lwork);
             assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
+            //cudaMemcpy(Diag_D, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
+            //printMatrix(m,m,Diag_D, m, "V");
+            
 
-            cudaStat1 = cudaMalloc((void**)&d_work, sizeof(double)*lwork);
-            assert(cudaSuccess == cudaStat1);
+            cudaStat1 = cudaMalloc((void**)&d_work, sizeof(float)*lwork);
+            //assert(cudaSuccess == cudaStat1);
 
             cusolver_status = cusolverDnSsyevd(
                 cusolverH,
@@ -197,16 +197,19 @@ int main(int argc, char **argv)
                 lwork,
                 devInfo);
 
-            cudaStat1 = cudaDeviceSynchronize();
-            assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
-            assert(cudaSuccess == cudaStat1);
+            cudaDeviceSynchronize();
+            //assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+            //assert(cudaSuccess == cudaStat1);
 
-            cudaStat1 = cudaMemcpy(eig_vec, d_W, sizeof(double)*m, cudaMemcpyDeviceToHost);
-            cudaStat2 = cudaMemcpy(Diag_D, d_A, sizeof(double)*lda*m, cudaMemcpyDeviceToHost);
+            cudaStat1 = cudaMemcpy(eig_vec, d_W, sizeof(float)*m, cudaMemcpyDeviceToHost);
+            cudaStat2 = cudaMemcpy(Diag_D, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
             cudaStat3 = cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost);
-            assert(cudaSuccess == cudaStat1);
-            assert(cudaSuccess == cudaStat2);
-            assert(cudaSuccess == cudaStat3);
+            //assert(cudaSuccess == cudaStat1);
+            //assert(cudaSuccess == cudaStat2);
+            //assert(cudaSuccess == cudaStat3);
+            printMatrix(m,1,eig_vec, lda, "C");
+            printf("=====Upper is eigen value====");
+            printMatrix(m,m,Diag_D, lda, "C");
             make_Diagonalization<<<HORIZON,HORIZON>>>(d_W, d_A);
             cudaMemcpy(h_hat_Q, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
 
@@ -216,7 +219,9 @@ int main(int argc, char **argv)
             cudaDeviceSynchronize();
             pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, device_cov);
             cudaDeviceSynchronize();
-            cudaMemcpy(d_hat_Q, device_diag_eig, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
+            cudaMemcpy(h_hat_Q, device_diag_eig, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
+            cudaMemcpy(d_hat_Q, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
+            //printMatrix(m,m,h_hat_Q, lda, "C");
 
             fprintf(fp,"%f %f %f %f %f %f %f %f %f %f\n",Us_host[0], Us_host[1],
                     Us_host[2], Us_host[3], Us_host[4], Us_host[5], Us_host[6], Us_host[7], Us_host[8], Us_host[9]);
@@ -230,6 +235,7 @@ int main(int argc, char **argv)
             printf("RSME == %f\n", RSME / HORIZON);
 #endif
         }
+        //printMatrix(m,m,h_hat_Q, lda, "C");
         now_u = Us_host[0];
         calc_Linear_example(state, now_u, params, state);
         for(int i = 0; i < Blocks; i++){

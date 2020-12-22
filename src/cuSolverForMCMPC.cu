@@ -18,13 +18,42 @@ __global__ void make_Diagonalization(float *vec, float *mat)
 
 __global__ void calc_Var_Cov_matrix(float *d_mat,Data1 *d_Data, float *Us_dev, int Blocks)
 {
-    unsigned int id = threadIdx.x + blockDim.x + blockIdx.x;
-    int denominator = 1/(Blocks - 1);
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    //int denominator;
+    //denominator = 1/(Blocks - 1);
+    //printf("hoge::id=%d %d@ =%f $ = %f\n",id,threadIdx.x,d_Data[5].Input[threadIdx.x],Us_dev[0]);
     for(int z = 0; z < Blocks; z++)
     {
         d_mat[id] +=  (d_Data[z].Input[threadIdx.x] - Us_dev[threadIdx.x]) * (d_Data[z].Input[blockIdx.x] - Us_dev[blockIdx.x]);
     }
-    d_mat[id] = d_mat[id] / denominator;
+    __syncthreads();
+    d_mat[id] = d_mat[id]  /(Blocks - 1);
+
+    //unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    //float values;
+    /*if(threadIdx.x == 0 && blockIdx.x ==0)
+    {
+        values[threadIdx.x] = 1.0f;
+    }*/
+    /*if(threadIdx.x == blockIdx.x)
+    {
+        for(int z = 0; z < Blocks; z++)
+        {
+            d_mat[id] +=  (d_Data[z].Input[threadIdx.x] - Us_dev[threadIdx.x]) * (d_Data[z].Input[blockIdx.x] - Us_dev[blockIdx.x]);
+        }
+        //d_mat[id] = (d_Data[z].Input[threadIdx.x] - Us_dev[threadIdx.x]) * (d_Data[z].Input[blockIdx.x] - Us_dev[blockIdx.x]);;
+        //values[threadIdx.x] = 1.0f;
+    }else{
+        d_mat[id] = 0.0f;
+        //values[threadIdx.x] = 0.0f;
+    }
+    __syncthreads();
+    d_mat[id] = d_mat[id]  /(Blocks - 1);
+    /*if(threadIdx.x == 0)
+    {
+       for(int i =0; i < blockDim.x; i++)
+           Mat[id] = values[i];
+    }  */  
 }
 
 // A * B → B

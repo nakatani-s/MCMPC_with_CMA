@@ -60,9 +60,9 @@ void init_state(float *st)
 void init_Weight_matrix(float * matrix)
 {
     matrix[0] = 1.0f;
-    matrix[1] = -1.0f;
+    matrix[1] = 0.0f;
     matrix[2] = 0.0f;
-    matrix[3] = -1.0f;
+    matrix[3] = 0.0f;
     matrix[4] = 1.0f;
 
     matrix[5] = 1.0f;
@@ -70,14 +70,14 @@ void init_Weight_matrix(float * matrix)
 
 void init_opt( float *opt )
 {
-    opt[0] = -3.6521f;
-    opt[1] = 0.84605f;
-    opt[2] = 4.03018f;
-    opt[3] = -2.5105f;
-    opt[4] = 1.45366f;
-    opt[5] = -0.55267f;
-    opt[6] = 0.13774f;
-    opt[7] = 0.02762f;
-    opt[8] = -0.07211f;
-    opt[9] = -0.01287f;
+    opt[0] = -3.6009f;
+    opt[1] = 1.0275f;
+    opt[2] = 4.1634f;
+    opt[3] = -2.7379f;
+    opt[4] = 1.1454f;
+    opt[5] = -0.2345f;
+    opt[6] = 0.00768f;
+    opt[7] = 0.1061f;
+    opt[8] = -0.05222f;
+    opt[9] = -0.0335f;
 }

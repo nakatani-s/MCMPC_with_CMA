@@ -18,9 +18,9 @@ define parameters for MCMPC and Systems
 #define interval 0.01
 #define Variavility 1.0
 
-#define Recalc 10
+#define Recalc 1
 #define N_OF_SAMPLES 3000
-#define THREAD_PER_BLOCKS 100
+#define THREAD_PER_BLOCKS 50
 #define HORIZON 10
 
 const int dim_hat_Q = HORIZON * HORIZON;
