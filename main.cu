@@ -98,6 +98,36 @@ int main(int argc, char **argv)
         }
     }
 
+    /* 固有値の取得 */
+    cusolverDnHandle_t cusolverH = NULL;
+    cusolverStatus_t cusolver_status = CUSOLVER_STATUS_SUCCESS;
+    cudaError_t cudaStat1 = cudaSuccess;
+    cudaError_t cudaStat2 = cudaSuccess;
+    cudaError_t cudaStat3 = cudaSuccess;
+
+    cusolver_status = cusolverDnCreate(&cusolverH);
+    assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+
+    const int m = HORIZON;
+    const int lda = m;
+
+    float eig_vec[m] = { };
+
+    float *d_A = NULL;
+    float *d_W = NULL;
+    int *devInfo = NULL;
+    float *d_work = NULL;
+    int lwork = 0;
+
+    int info_gpu = 0;
+
+    cudaStat1 = cudaMalloc ((void**)&d_A, sizeof(float) * lda * m);
+    cudaStat2 = cudaMalloc ((void**)&d_W, sizeof(float) * m);
+    cudaStat3 = cudaMalloc ((void**)&devInfo, sizeof(int));
+    assert(cudaSuccess == cudaStat1);
+    assert(cudaSuccess == cudaStat2);
+    assert(cudaSuccess == cudaStat3);
+
     for(int time = 0; time < TIME; time++){
         for(int repeat = 0; repeat < Recalc; repeat++){
             var = Variavility;
@@ -114,7 +144,7 @@ int main(int argc, char **argv)
             cudaMemcpy(h_hat_Q, device_cov, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
             // get_eigen_values(h_hat_Q, Diag_D);
             /* 固有値の取得 */
-            cusolverDnHandle_t cusolverH = NULL;
+            /*cusolverDnHandle_t cusolverH = NULL;
             cusolverStatus_t cusolver_status = CUSOLVER_STATUS_SUCCESS;
             cudaError_t cudaStat1 = cudaSuccess;
             cudaError_t cudaStat2 = cudaSuccess;
@@ -132,15 +162,8 @@ int main(int argc, char **argv)
 
             int info_gpu = 0;
 
-            cusolver_status = cusolverDnCreate(&cusolverH);
-            assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
-
-            cudaStat1 = cudaMalloc ((void**)&d_A, sizeof(float) * lda * m);
-            cudaStat2 = cudaMalloc ((void**)&d_W, sizeof(float) * m);
-            cudaStat3 = cudaMalloc ((void**)&devInfo, sizeof(int));
-            assert(cudaSuccess == cudaStat1);
-            assert(cudaSuccess == cudaStat2);
-            assert(cudaSuccess == cudaStat3);
+            /*cusolver_status = cusolverDnCreate(&cusolverH);
+            assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);*/
 
             cudaStat1 = cudaMemcpy(d_A, h_hat_Q, sizeof(float) * lda * m, cudaMemcpyHostToDevice);
             assert(cudaSuccess == cudaStat1);
@@ -187,13 +210,6 @@ int main(int argc, char **argv)
             make_Diagonalization<<<HORIZON,HORIZON>>>(d_W, d_A);
             cudaMemcpy(h_hat_Q, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
 
-            if (d_A    ) cudaFree(d_A);
-            if (d_W    ) cudaFree(d_W);
-            if (devInfo) cudaFree(devInfo);
-            if (d_work ) cudaFree(d_work);
-
-            if (cusolverH) cusolverDnDestroy(cusolverH);
-
             cudaMemcpy(device_diag_eig, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             cudaMemcpy(device_cov, Diag_D, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             pwr_matrix_answerB<<<HORIZON,HORIZON>>>(device_cov, device_diag_eig);
@@ -223,6 +239,12 @@ int main(int argc, char **argv)
             h_dataFromBlocks[i].Input[HORIZON-1] = Us_host[HORIZON - 1];
         }
     }
+    if (d_A    ) cudaFree(d_A);
+    if (d_W    ) cudaFree(d_W);
+    if (devInfo) cudaFree(devInfo);
+    if (d_work ) cudaFree(d_work);
+
+    if (cusolverH) cusolverDnDestroy(cusolverH);
     fclose(fp);
     // fclose(hp);
     cudaDeviceReset();
