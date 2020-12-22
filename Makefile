@@ -3,7 +3,7 @@
 ## USER SPECIFIC DIRECTORIES ##
 
 # CUDA directory:
-CUDA_ROOT_DIR=/usr/local/cuda
+CUDA_ROOT_DIR=/usr/local/cuda-10.2
 
 ##########################################################
 
