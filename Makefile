@@ -69,7 +69,7 @@ $(EXE) : $(OBJS)
 # $(OBJ_DIR)/%.o : %.cpp
 	# $(CC) $(CC_FLAGS) -c $< -o $@
 $(OBJ_DIR)/%.o : %.cu
-	$(NVCC) $(NVCC_FLAGS) -c $< -o $@ $(NVCC_LIBS)
+	$(NVCC) $(NVCC_FLAGS) -c $< -o $@ $(CUDA_INC_DIR) $(NVCC_LIBS)
 
 # Compile C++ source files to object files:
 # $(OBJ_DIR)/%.o : $(SRC_DIR)/%.cpp include/%.h
