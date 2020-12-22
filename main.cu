@@ -136,8 +136,8 @@ int main(int argc, char **argv)
     float *d_work;
     int lwork = 0;
 
-    int work_size;
-    float *work_space;
+    // int work_size;
+    // float *work_space;
 
     int info_gpu = 0;
 
@@ -221,15 +221,16 @@ int main(int argc, char **argv)
             pwr_matrix_answerB<<<HORIZON,HORIZON>>>(device_cov, device_diag_eig);
             cudaDeviceSynchronize();
 
-            cusolver_status = cusolverDnSpotrf_bufferSize(cusolverH, uplo, m, device_cov, m, &work_size);
+            /*cusolver_status = cusolverDnSpotrf_bufferSize(cusolverH, uplo, m, device_cov, m, &work_size);
             assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );
             // float* workspace ;
             cudaMalloc((void**)&work_space, sizeof(float)*work_size);
-            cusolver_status = cusolverDnSpotrf(cusolverH, uplo, m, device_cov, m /* mat_Aの横幅 */, work_space, work_size, devInfo);
+            cusolver_status = cusolverDnSpotrf(cusolverH, uplo, m, device_cov, m , work_space, work_size, devInfo);
             assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );
             setup_init_Covariance<<<HORIZON, HORIZON>>>(d_hat_Q);
-            cusolver_status = cusolverDnSpotrs(cusolverH, uplo, m, m /* mat_Bの横幅 */, device_cov, m, d_hat_Q, m, devInfo);
-            assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );
+            cusolver_status = cusolverDnSpotrs(cusolverH, uplo, m, m , device_cov, m, d_hat_Q, m, devInfo);
+            assert( cusolver_status == CUSOLVER_STATUS_SUCCESS );*/
+            tanspose<<<HORIZON,HORIZON>>>(d_hat_Q, device_cov);
             // pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, device_cov);
             pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, d_hat_Q);
             cudaDeviceSynchronize();

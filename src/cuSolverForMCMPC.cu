@@ -59,7 +59,7 @@ __global__ void calc_Var_Cov_matrix(float *d_mat,Data1 *d_Data, float *Us_dev, i
 // A * B → B
 __global__ void pwr_matrix_answerB(float *A, float *B)
 {
-    unsigned int id = threadIdx.x + blockDim.x + blockIdx.x;
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     int row_index, column_index;
     if(blockIdx.x == 0)
     {
@@ -88,7 +88,7 @@ __global__ void pwr_matrix_answerB(float *A, float *B)
 // A * B →　A
 __global__ void pwr_matrix_answerA(float *A, float *B)
 {
-    unsigned int id = threadIdx.x + blockDim.x + blockIdx.x;
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     int row_index, column_index;
     if(blockIdx.x == 0)
     {
@@ -113,7 +113,13 @@ __global__ void pwr_matrix_answerA(float *A, float *B)
     }
 
 }
+__global__ void tanspose(float *Out, float *In)
+{
+    unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    int In_index = blockIdx.x + blockDim.x * threadIdx.x;
 
+    Out[id] = In[In_index];
+}
 void get_eigen_values(float *A, float *D)
 {
     cusolverDnHandle_t cusolverH = NULL;
