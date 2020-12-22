@@ -112,7 +112,88 @@ int main(int argc, char **argv)
             calc_Var_Cov_matrix<<<HORIZON, HORIZON>>>(device_cov, d_dataFromBlocks, Us_device, Blocks);
             cudaDeviceSynchronize();
             cudaMemcpy(h_hat_Q, device_cov, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
-            get_eigen_values(h_hat_Q, Diag_D);
+            // get_eigen_values(h_hat_Q, Diag_D);
+            /* 固有値の取得 */
+            cusolverDnHandle_t cusolverH = NULL;
+            cusolverStatus_t cusolver_status = CUSOLVER_STATUS_SUCCESS;
+            cudaError_t cudaStat1 = cudaSuccess;
+            cudaError_t cudaStat2 = cudaSuccess;
+            cudaError_t cudaStat3 = cudaSuccess;
+            const int m = HORIZON;
+            const int lda = m;
+
+            float eig_vec[m] = { };
+
+            float *d_A = NULL;
+            float *d_W = NULL;
+            int *devInfo = NULL;
+            float *d_work = NULL;
+            int lwork = 0;
+
+            int info_gpu = 0;
+
+            cusolver_status = cusolverDnCreate(&cusolverH);
+            assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+
+            cudaStat1 = cudaMalloc ((void**)&d_A, sizeof(float) * lda * m);
+            cudaStat2 = cudaMalloc ((void**)&d_W, sizeof(float) * m);
+            cudaStat3 = cudaMalloc ((void**)&devInfo, sizeof(int));
+            assert(cudaSuccess == cudaStat1);
+            assert(cudaSuccess == cudaStat2);
+            assert(cudaSuccess == cudaStat3);
+
+            cudaStat1 = cudaMemcpy(d_A, h_hat_Q, sizeof(float) * lda * m, cudaMemcpyHostToDevice);
+            assert(cudaSuccess == cudaStat1);
+
+            cusolverEigMode_t jobz = CUSOLVER_EIG_MODE_VECTOR; // compute eigenvalues and eigenvectors.
+            cublasFillMode_t uplo = CUBLAS_FILL_MODE_LOWER;
+
+            cusolver_status = cusolverDnSsyevd_bufferSize(
+                cusolverH,
+                jobz,
+                uplo,
+                m,
+                d_A,
+                lda,
+                d_W,
+                &lwork);
+            assert (cusolver_status == CUSOLVER_STATUS_SUCCESS);
+
+            cudaStat1 = cudaMalloc((void**)&d_work, sizeof(double)*lwork);
+            assert(cudaSuccess == cudaStat1);
+
+            cusolver_status = cusolverDnSsyevd(
+                cusolverH,
+                jobz,
+                uplo,
+                m,
+                d_A,
+                lda,
+                d_W,
+                d_work,
+                lwork,
+                devInfo);
+
+            cudaStat1 = cudaDeviceSynchronize();
+            assert(CUSOLVER_STATUS_SUCCESS == cusolver_status);
+            assert(cudaSuccess == cudaStat1);
+
+            cudaStat1 = cudaMemcpy(eig_vec, d_W, sizeof(double)*m, cudaMemcpyDeviceToHost);
+            cudaStat2 = cudaMemcpy(Diag_D, d_A, sizeof(double)*lda*m, cudaMemcpyDeviceToHost);
+            cudaStat3 = cudaMemcpy(&info_gpu, devInfo, sizeof(int), cudaMemcpyDeviceToHost);
+            assert(cudaSuccess == cudaStat1);
+            assert(cudaSuccess == cudaStat2);
+            assert(cudaSuccess == cudaStat3);
+            make_Diagonalization<<<HORIZON,HORIZON>>>(d_W, d_A);
+            cudaMemcpy(h_hat_Q, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
+
+            if (d_A    ) cudaFree(d_A);
+            if (d_W    ) cudaFree(d_W);
+            if (devInfo) cudaFree(devInfo);
+            if (d_work ) cudaFree(d_work);
+
+            if (cusolverH) cusolverDnDestroy(cusolverH);
+
             cudaMemcpy(device_diag_eig, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             cudaMemcpy(device_cov, Diag_D, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             pwr_matrix_answerB<<<HORIZON,HORIZON>>>(device_cov, device_diag_eig);
