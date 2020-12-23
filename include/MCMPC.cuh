@@ -2,6 +2,7 @@
     MCMPC.cuh
 */
 #include<cuda.h>
+#include<curand_kernel.h>
 #include "params.cuh"
 #include "DataStructure.cuh"
 #include "dynamics.cuh"

@@ -19,15 +19,22 @@ __global__ void make_Diagonalization(float *vec, float *mat)
 __global__ void calc_Var_Cov_matrix(float *d_mat,Data1 *d_Data, float *Us_dev, int Blocks)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
+    float pows;
+    //int counter = 0;
     //int denominator;
     //denominator = 1/(Blocks - 1);
     //printf("hoge::id=%d %d@ =%f $ = %f\n",id,threadIdx.x,d_Data[5].Input[threadIdx.x],Us_dev[0]);
     for(int z = 0; z < Blocks; z++)
     {
-        d_mat[id] +=  (d_Data[z].Input[threadIdx.x] - Us_dev[threadIdx.x]) * (d_Data[z].Input[blockIdx.x] - Us_dev[blockIdx.x]);
+        pows +=  (d_Data[z].Input[threadIdx.x] - Us_dev[threadIdx.x]) * (d_Data[z].Input[blockIdx.x] - Us_dev[blockIdx.x]);
+    }
+    if(threadIdx.x == blockIdx.x && pows < 0.00001f){
+        pows += (Blocks -1);
+        //pows = d_mat[id];
     }
     __syncthreads();
-    d_mat[id] = d_mat[id]  /(Blocks - 1);
+    
+    d_mat[id] = pows  /(Blocks - 1);
 
     //unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     //float values;
@@ -61,6 +68,7 @@ __global__ void pwr_matrix_answerB(float *A, float *B)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     int row_index, column_index;
+    float pows;
     if(blockIdx.x == 0)
     {
         row_index = (int)blockDim.x * blockIdx.x;
@@ -74,14 +82,15 @@ __global__ void pwr_matrix_answerB(float *A, float *B)
         column_index = ((int)blockDim.x * threadIdx.x) -1;
     }
     for(int k = 0; k < HORIZON; k++){
-        row[id] += A[column_index + k] * B[row_index + k];
+        //row[id] += A[column_index + k] * B[row_index + k];
+        pows += A[column_index + k] * B[row_index + k];
     }
-
     __syncthreads();
-    if(threadIdx.x == 0)
+    B[id] = pows;
+    /*if(threadIdx.x == 0)
     {
         B[id] = row[id];
-    }
+    }*/
 
 }
 
@@ -90,6 +99,7 @@ __global__ void pwr_matrix_answerA(float *A, float *B)
 {
     unsigned int id = threadIdx.x + blockDim.x * blockIdx.x;
     int row_index, column_index;
+    float pows;
     if(blockIdx.x == 0)
     {
         row_index = (int)blockDim.x * blockIdx.x;
@@ -103,14 +113,16 @@ __global__ void pwr_matrix_answerA(float *A, float *B)
         column_index = ((int)blockDim.x * threadIdx.x) -1;
     }
     for(int k = 0; k < HORIZON; k++){
-        row[id] += A[column_index + k] * B[row_index + k];
+        //row[id] += A[column_index + k] * B[row_index + k];
+        pows += A[column_index + k] * B[row_index + k];
     }
 
     __syncthreads();
-    if(threadIdx.x == 0)
+    A[id] = pows;
+    /*if(threadIdx.x == 0)
     {
         A[id] = row[id];
-    }
+    }*/
 
 }
 __global__ void tanspose(float *Out, float *In)
@@ -119,6 +131,7 @@ __global__ void tanspose(float *Out, float *In)
     int In_index = blockIdx.x + blockDim.x * threadIdx.x;
 
     Out[id] = In[In_index];
+    __syncthreads();
 }
 void get_eigen_values(float *A, float *D)
 {

@@ -52,9 +52,16 @@ __device__ float generate_u(int t, float mean, float var, float *d_cov, float *z
     int count_index;
     count_index = t * HORIZON;
     float ret, sec_term;
+    sec_term = 0; 
     for(int k = 0; k < HORIZON; k++)
     {
-        sec_term += d_cov[count_index + k]*z[k];
+        
+        sec_term += d_cov[count_index+k]*z[k];
+        /*if(t == 0 && k == 0){
+             sec_term += d_cov[t]*z[k];
+        }else{
+             sec_term += d_cov[t + k*HORIZON -1]*z[k];
+        }*/
     }
     ret = mean + var * sec_term;
     return ret;
@@ -113,25 +120,38 @@ __global__ void MCMPC_GPU_Linear_Example(float x, float y, float w, curandState 
         for(int t_x = 0; t_x < HORIZON; t_x++)
         {
             z[t_x] = gen_u(seq, devs, 0, 1.0f);
-            seq += 3;
+            //z[t_x] = gen_u(seq, devs, d_Datas[0].Input[t_x], var);
+            seq += HORIZON;
         }
-        u[t] = generate_u(t, d_Datas[0].Input[t], var, d_cov, z);
-        if(u[t]<-4.0f){
+        u[t] = generate_u(t, d_Datas[0].Input[t] /*ここが影響している可能性*/, var, d_cov, z); //ここが影響している可能性
+        if(isnan(u[t])){
+            u[t] = d_Datas[0].Input[t];
+        }
+        //u[t] = z[t];
+        /*if(u[t]<-4.0f){
            u[t] = -4.0f;
         }
         if(u[t] > 4.0f){
            u[t] = 4.0f;
-        }
-        //printf("hoge id=%d @ %f %f\n", id, u[t], z[t]);
-        calc_Linear_example(d_state_here, u[t], d_param, get_state);
+        }*/
+        //printf("hoge = %d id=%d @ %f %f\n",t, id, u[t], z[t]);
+        //calc_Linear_example(d_state_here, u[t], d_param, get_state);
+        get_state[0] = d_param[0]*x + d_param[1]*y + d_param[2]*w + d_param[9]*u[t];
+        get_state[1] = d_param[3]*x + d_param[4]*y + d_param[5]*w + d_param[10]*u[t];
+        get_state[2] = d_param[6]*x + d_param[7]*y + d_param[8]*w + d_param[11]*u[t];
+        x = get_state[0];
+        y = get_state[1];
+        w = get_state[2];
         //printf("hoge id=%d @ %f %f %f\n", id, u[t], d_param[0], get_state[1]);
-        qx += d_matrix[0] * get_state[0] * get_state[0];
-        qx += d_matrix[1] * get_state[0] * get_state[1];
-        qx += d_matrix[3] * get_state[0] * get_state[1];
-        qx += d_matrix[4] * get_state[1] * get_state[1];
-        for(int h = 0; h < dim_state; h++){
+        //qx += d_matrix[0] * get_state[0] * get_state[0] + d_matrix[4] * get_state[1] * get_state[1] +d_matrix[5] * u[t] * u[t];
+         qx = x * x * d_matrix[0] + y * y * d_matrix[1] + w * w * d_matrix[2] + d_matrix[3]*u[t]*u[t]; 
+        //qx += d_matrix[1] * get_state[0] * get_state[1];
+        //qx += d_matrix[3] * get_state[0] * get_state[1];
+        //qx += d_matrix[4] * get_state[1] * get_state[1];
+        //qx += d_matrix[5] * u[t] * u[t];
+        /*for(int h = 0; h < dim_state; h++){
            d_state_here[h] = get_state[h];
-        }
+        }*/
         
         total_cost += qx;
 

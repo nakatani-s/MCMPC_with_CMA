@@ -73,7 +73,7 @@ int main(int argc, char **argv)
     /* GPUの設定 */
     unsigned int numBlocks, randomBlocks, randomNums/*, minId_cpu*/;
     int Blocks;
-    randomNums = N_OF_SAMPLES * dim_U * HORIZON;
+    randomNums = N_OF_SAMPLES * (dim_U+1) * HORIZON;
     randomBlocks = countBlocks(randomNums, THREAD_PER_BLOCKS);
     numBlocks = countBlocks(N_OF_SAMPLES, THREAD_PER_BLOCKS);
     printf("#NumBlocks = %d\n", numBlocks);
@@ -89,7 +89,7 @@ int main(int argc, char **argv)
     /* curand の設定 */
     curandState *devStates;
     cudaMalloc((void **)&devStates, randomNums * sizeof(curandState));
-    setup_kernel<<<N_OF_SAMPLES * dim_U, HORIZON>>>(devStates,rand());
+    setup_kernel<<<N_OF_SAMPLES * (dim_U+1), HORIZON>>>(devStates,rand());
     cudaDeviceSynchronize();
 
     /* Covariance の定義 */
@@ -152,7 +152,8 @@ int main(int argc, char **argv)
 
     for(int time = 0; time < TIME; time++){
         for(int repeat = 0; repeat < Recalc; repeat++){
-            var = Variavility * pow(0.95,repeat);
+            //var = Variavility * pow(0.95,repeat);
+            var = Variavility;
             cudaMemcpy(d_dataFromBlocks, h_dataFromBlocks, sizeof(Data1)*numBlocks, cudaMemcpyHostToDevice);
             cudaDeviceSynchronize();
             // MCMPC_GPU<<<numBlocks, THREAD_PER_BLOCKS>>>(state, devStates, d_dataFromBlocks, var, Blocks, d_hat_Q);
@@ -166,7 +167,7 @@ int main(int argc, char **argv)
             calc_Var_Cov_matrix<<<HORIZON, HORIZON>>>(device_cov, d_dataFromBlocks, Us_device, Blocks);
             cudaDeviceSynchronize();
             cudaMemcpy(h_hat_Q, device_cov, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
-            //printMatrix(m,m,h_hat_Q, lda, "C");
+            printMatrix(m,m,h_hat_Q, lda, "DA");
             
             //cudaStat1 = cudaMemcpy(d_A, h_hat_Q, sizeof(float) * lda * m, cudaMemcpyHostToDevice);
             cudaStat1 = cudaMemcpy(d_A, h_hat_Q, sizeof(float) * lda * m, cudaMemcpyHostToDevice);
@@ -215,7 +216,7 @@ int main(int argc, char **argv)
             // printMatrix(m,m,Diag_D, lda, "C");
             make_Diagonalization<<<HORIZON,HORIZON>>>(d_W, d_A);
             cudaMemcpy(h_hat_Q, d_A, sizeof(float)*lda*m, cudaMemcpyDeviceToHost);
-
+            //printMatrix(m,m,h_hat_Q, lda, "C");
             cudaMemcpy(device_diag_eig, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             cudaMemcpy(device_cov, Diag_D, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             pwr_matrix_answerB<<<HORIZON,HORIZON>>>(device_cov, device_diag_eig);
@@ -234,15 +235,21 @@ int main(int argc, char **argv)
             // pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, device_cov);
             pwr_matrix_answerA<<<HORIZON,HORIZON>>>(device_diag_eig, d_hat_Q);
             cudaDeviceSynchronize();
-            cudaMemcpy(h_hat_Q, device_diag_eig, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
-            cudaMemcpy(d_hat_Q, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
+            tanspose<<<HORIZON,HORIZON>>>(d_hat_Q, device_diag_eig);
+            //cudaMemcpy(h_hat_Q, device_diag_eig, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
+            cudaMemcpy(h_hat_Q, d_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyDeviceToHost);
+            //cudaMemcpy(d_hat_Q, h_hat_Q, sizeof(float)*dim_hat_Q, cudaMemcpyHostToDevice);
             //printMatrix(m,m,h_hat_Q, lda, "C");
 
             fprintf(fp,"%f %f %f %f %f %f %f %f %f %f\n",Us_host[0], Us_host[1],
                     Us_host[2], Us_host[3], Us_host[4], Us_host[5], Us_host[6], Us_host[7], Us_host[8], Us_host[9]);
 
+            for(int count = 0; count < HORIZON; count++){
+                h_dataFromBlocks[0].Input[count] = Us_host[count];
+            }
+
 #ifdef Linear
-            float RSME;
+            float RSME=0.0f;
             for(int d = 0; d < HORIZON; d++){
                 Error[d] = Us_host[d] - opt[d];
                 RSME += powf(Error[d],2);

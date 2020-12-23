@@ -13,15 +13,15 @@ define parameters for MCMPC and Systems
 #define dim_state 3
 #define dim_U 1
 
-#define dim_weight_matrix 5
+#define dim_weight_matrix 4
 #define NUM_CONST 4
 #define interval 0.01
 #define Variavility 1.0
 
-#define Recalc 1
+#define Recalc 100
 #define N_OF_SAMPLES 3000
 #define THREAD_PER_BLOCKS 50
-#define HORIZON 10
+#define HORIZON 15
 
 const int dim_hat_Q = HORIZON * HORIZON;
 
